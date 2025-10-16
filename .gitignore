@@ -1,0 +1,12 @@
+# Node and build outputs
+node_modules/
+dist/
+.vite/
+
+# Logs and env
+*.log
+.env
+
+# Editor and local
+.cursor/
+.DS_Store
