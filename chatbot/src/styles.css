@@ -107,3 +107,11 @@ body{
 @media (max-width: 480px){
   .bubble{max-width:90%}
 }
+
+.composer select{
+  background: rgba(15,23,42,0.6);
+  color: var(--text);
+  border: 1px solid rgba(148,163,184,0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}

@@ -66,12 +66,27 @@ function generateBotReply(text) {
   return `You said: "${text}". I'm a simple demo bot.`
 }
 
+async function fetchLLMReply({ provider, messages }) {
+  const resp = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, messages }),
+  })
+  if (!resp.ok) {
+    const text = await resp.text()
+    throw new Error(text || 'Request failed')
+  }
+  const data = await resp.json()
+  return data.text
+}
+
 export default function App() {
   const [messages, setMessages] = useState(() => [
     { id: 1, role: 'bot', text: 'Hi! I\'m your assistant. Ask me anything.' },
   ])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [provider, setProvider] = useState('openai') // 'openai' | 'gemini'
   const nextId = useRef(2)
   const listRef = useRef(null)
 
@@ -105,17 +120,28 @@ export default function App() {
     const last = messages[messages.length - 1]
     if (last.role !== 'user') return
 
+    let cancelled = false
     setIsTyping(true)
-    const delayMs = Math.min(1200, 400 + Math.max(0, last.text.length) * 20)
-    const timeoutId = setTimeout(() => {
-      const replyText = generateBotReply(last.text)
-      const botMessage = { id: nextId.current++, role: 'bot', text: replyText }
-      setMessages((prev) => [...prev, botMessage])
-      setIsTyping(false)
-    }, delayMs)
 
-    return () => clearTimeout(timeoutId)
-  }, [messages])
+    const run = async () => {
+      try {
+        const history = messages.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, text: m.text }))
+        const text = await fetchLLMReply({ provider, messages: history })
+        if (cancelled) return
+        const botMessage = { id: nextId.current++, role: 'bot', text }
+        setMessages((prev) => [...prev, botMessage])
+      } catch (err) {
+        if (cancelled) return
+        const botMessage = { id: nextId.current++, role: 'bot', text: `Error: ${String(err?.message || err)}` }
+        setMessages((prev) => [...prev, botMessage])
+      } finally {
+        if (!cancelled) setIsTyping(false)
+      }
+    }
+    run()
+
+    return () => { cancelled = true }
+  }, [messages, provider])
 
   return (
     <div className="app">
@@ -136,6 +162,10 @@ export default function App() {
           aria-label="Message"
         />
         <button type="submit" disabled={!canSend} aria-label="Send message">Send</button>
+        <select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Model provider">
+          <option value="openai">OpenAI</option>
+          <option value="gemini">Gemini</option>
+        </select>
       </form>
     </div>
   )
