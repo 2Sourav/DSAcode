@@ -86,7 +86,7 @@ export default function App() {
   ])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [provider, setProvider] = useState('openai') // 'openai' | 'gemini'
+  const [provider, setProvider] = useState('openai') // 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'mistral' | 'azure' | 'local'
   const nextId = useRef(2)
   const listRef = useRef(null)
 
@@ -165,6 +165,11 @@ export default function App() {
         <select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Model provider">
           <option value="openai">OpenAI</option>
           <option value="gemini">Gemini</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="cohere">Cohere</option>
+          <option value="mistral">Mistral</option>
+          <option value="azure">Azure OpenAI</option>
+          <option value="local">Local (self-hosted)</option>
         </select>
       </form>
     </div>
