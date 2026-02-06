@@ -88,7 +88,7 @@ body{
 }
 .composer textarea{
   flex:1; resize: vertical; min-height:42px; max-height:200px;
-  background: rgba(15,23,42,0.6);
+  background: rgba(15,23,42,0.8);
   color: var(--text);
   border: 1px solid rgba(148,163,184,0.2);
   border-radius: 10px;
