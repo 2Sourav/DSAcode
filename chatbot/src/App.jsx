@@ -1,177 +1,272 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+
+const SUGGESTIONS = [
+  'Hello Gemini',
+  'What can you do?',
+  'Write a short motivational quote',
+  'Explain arrays in simple words',
+]
+
+const SYSTEM_PROMPT = 'You are a friendly, concise chatbot inside a colorful React chat app. Give clear, helpful, natural responses and keep them suitable for a general audience.'
+
+function formatTime() {
+  return new Date().toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function renderMessageText(text) {
+  const parts = text.split(/(\*\*.*?\*\*)/g)
+
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>
+    }
+
+    return <React.Fragment key={index}>{part}</React.Fragment>
+  })
+}
+
+async function fetchChatReply(messages) {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      provider: 'gemini',
+      messages: [
+        { role: 'system', text: SYSTEM_PROMPT },
+        ...messages.map((message) => ({
+          role: message.role,
+          text: message.text,
+        })),
+      ],
+    }),
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new Error(data?.error || 'Unable to get a reply from Gemini right now.')
+  }
+
+  if (!data?.text) {
+    throw new Error('Gemini returned an empty response.')
+  }
+
+  return data.text
+}
 
 function Header() {
   return (
     <header className="chat-header">
-      <div className="brand">
-        <span className="logo" aria-hidden>💬</span>
-        <h1>React Chatbot</h1>
+      <div className="brand-block">
+        <div className="brand-badge" aria-hidden>
+          AI
+        </div>
+        <div>
+          <p className="eyebrow">Gemini Powered</p>
+          <h1>ColorSplash Chat</h1>
+        </div>
       </div>
-      <a className="gh" href="https://vitejs.dev" target="_blank" rel="noreferrer">Vite</a>
+      <div className="status-pill">Server connected</div>
     </header>
   )
 }
 
-function MessageBubble({ role, text }) {
+function WelcomeCard({ onSuggestionClick }) {
   return (
-    <div className={"message " + (role === 'user' ? 'from-user' : 'from-bot')}>
-      <div className="bubble" role="text">{text}</div>
-    </div>
+    <section className="welcome-card">
+      <p className="welcome-label">Server-side AI chatbot</p>
+      <h2>Chat with Gemini through your Express backend.</h2>
+      <p className="welcome-copy">
+        Your API key stays on the server, while the React app only sends chat messages to your local API route.
+      </p>
+      <div className="suggestion-row">
+        {SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            className="suggestion-chip"
+            onClick={() => onSuggestionClick(suggestion)}
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function MessageBubble({ message }) {
+  const isUser = message.role === 'user'
+
+  return (
+    <article className={`message ${isUser ? 'from-user' : 'from-bot'}`}>
+      {!isUser && <div className="avatar bot-avatar">AI</div>}
+      <div className="message-body">
+        <div className="message-meta">
+          <span>{isUser ? 'You' : 'Gemini'}</span>
+          <span>{message.time}</span>
+        </div>
+        <div className="bubble">{renderMessageText(message.text)}</div>
+      </div>
+      {isUser && <div className="avatar user-avatar">You</div>}
+    </article>
   )
 }
 
 function TypingIndicator() {
   return (
-    <div className="typing">
-      <span className="dot" />
-      <span className="dot" />
-      <span className="dot" />
+    <div className="message from-bot">
+      <div className="avatar bot-avatar">AI</div>
+      <div className="message-body">
+        <div className="message-meta">
+          <span>Gemini</span>
+          <span>typing...</span>
+        </div>
+        <div className="bubble typing-bubble" aria-label="Gemini is typing">
+          <span className="dot" />
+          <span className="dot" />
+          <span className="dot" />
+        </div>
+      </div>
     </div>
   )
 }
 
-function normalize(text) {
-  return text.toLowerCase().replace(/[^\w\s]/g, '').trim()
-}
-
-function generateBotReply(text) {
-  const t = normalize(text)
-  if (!t) return "Could you clarify that?"
-
-  if (/(^|\b)(hi|hello|hey|hola)(\b|!|\.)/.test(t)) {
-    return "Hello! How can I help you today?"
-  }
-
-  if (/help|support|assist/.test(t)) {
-    return "I can greet, tell the time/date, echo text, or tell a joke. Try 'time', 'date', 'echo your text', or 'joke'."
-  }
-
-  if (/\btime\b/.test(t)) {
-    return `The current time is ${new Date().toLocaleTimeString()}.`
-  }
-
-  if (/\b(date|day)\b/.test(t)) {
-    return `Today is ${new Date().toLocaleDateString()}.`
-  }
-
-  if (/\bjoke|funny\b/.test(t)) {
-    return "Why do programmers prefer dark mode? Because light attracts bugs."
-  }
-
-  const echoMatch = t.match(/\becho\s+(.+)/)
-  if (echoMatch) {
-    return echoMatch[1]
-  }
-
-  return `You said: "${text}". I'm a simple demo bot.`
-}
-
-async function fetchLLMReply({ provider, messages }) {
-  const resp = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ provider, messages }),
-  })
-  if (!resp.ok) {
-    const text = await resp.text()
-    throw new Error(text || 'Request failed')
-  }
-  const data = await resp.json()
-  return data.text
-}
-
 export default function App() {
-  const [messages, setMessages] = useState(() => [
-    { id: 1, role: 'bot', text: 'Hi! I\'m your assistant. Ask me anything.' },
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      role: 'bot',
+      text: 'Hi! I am connected to Gemini through your server. Ask me anything to start the conversation.',
+      time: formatTime(),
+    },
   ])
   const [input, setInput] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [provider, setProvider] = useState('openai') // 'openai' | 'gemini' | 'anthropic' | 'cohere' | 'mistral' | 'azure' | 'local'
   const nextId = useRef(2)
   const listRef = useRef(null)
 
   const canSend = useMemo(() => input.trim().length > 0 && !isTyping, [input, isTyping])
 
-  const handleSubmit = useCallback((e) => {
-    e.preventDefault()
-    if (!canSend) return
-
-    const userMessage = { id: nextId.current++, role: 'user', text: input.trim() }
-    setMessages((prev) => [...prev, userMessage])
-    setInput('')
-  }, [canSend, input])
-
-  const onKeyDown = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      const form = e.currentTarget.form
-      if (form) form.requestSubmit()
-    }
-  }, [])
-
   useEffect(() => {
-    const el = listRef.current
-    if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    const list = listRef.current
+    if (!list) return
+    list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' })
   }, [messages, isTyping])
 
   useEffect(() => {
-    if (messages.length === 0) return
-    const last = messages[messages.length - 1]
-    if (last.role !== 'user') return
+    const lastMessage = messages[messages.length - 1]
+    if (!lastMessage || lastMessage.role !== 'user') return
 
     let cancelled = false
     setIsTyping(true)
 
     const run = async () => {
       try {
-        const history = messages.map(m => ({ role: m.role === 'bot' ? 'assistant' : m.role, text: m.text }))
-        const text = await fetchLLMReply({ provider, messages: history })
+        const reply = await fetchChatReply(messages)
         if (cancelled) return
-        const botMessage = { id: nextId.current++, role: 'bot', text }
-        setMessages((prev) => [...prev, botMessage])
-      } catch (err) {
+
+        setMessages((current) => [
+          ...current,
+          {
+            id: nextId.current++,
+            role: 'bot',
+            text: reply,
+            time: formatTime(),
+          },
+        ])
+      } catch (error) {
         if (cancelled) return
-        const botMessage = { id: nextId.current++, role: 'bot', text: `Error: ${String(err?.message || err)}` }
-        setMessages((prev) => [...prev, botMessage])
+
+        setMessages((current) => [
+          ...current,
+          {
+            id: nextId.current++,
+            role: 'bot',
+            text: `I hit a server error: ${String(error?.message || error)} Check the server terminal or open /api/debug/gemini for more detail.`,
+            time: formatTime(),
+          },
+        ])
       } finally {
-        if (!cancelled) setIsTyping(false)
+        if (!cancelled) {
+          setIsTyping(false)
+        }
       }
     }
+
     run()
 
-    return () => { cancelled = true }
-  }, [messages, provider])
+    return () => {
+      cancelled = true
+    }
+  }, [messages])
+
+  function sendMessage(text) {
+    const trimmed = text.trim()
+    if (!trimmed || isTyping) return
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: nextId.current++,
+        role: 'user',
+        text: trimmed,
+        time: formatTime(),
+      },
+    ])
+    setInput('')
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    sendMessage(input)
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      event.currentTarget.form?.requestSubmit()
+    }
+  }
 
   return (
-    <div className="app">
-      <Header />
-      <main className="chat" ref={listRef} aria-live="polite" aria-relevant="additions">
-        {messages.map((m) => (
-          <MessageBubble key={m.id} role={m.role} text={m.text} />
-        ))}
-        {isTyping && <TypingIndicator />}
-      </main>
-      <form className="composer" onSubmit={handleSubmit}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Type a message..."
-          rows={1}
-          aria-label="Message"
-        />
-        <button type="submit" disabled={!canSend} aria-label="Send message">Send</button>
-        <select value={provider} onChange={(e) => setProvider(e.target.value)} aria-label="Model provider">
-          <option value="openai">OpenAI</option>
-          <option value="gemini">Gemini</option>
-          <option value="anthropic">Anthropic</option>
-          <option value="cohere">Cohere</option>
-          <option value="mistral">Mistral</option>
-          <option value="azure">Azure OpenAI</option>
-          <option value="local">Local (self-hosted)</option>
-        </select>
-      </form>
+    <div className="app-shell">
+      <div className="ambient ambient-one" aria-hidden />
+      <div className="ambient ambient-two" aria-hidden />
+      <div className="app">
+        <Header />
+        <WelcomeCard onSuggestionClick={sendMessage} />
+
+        <main className="chat-window">
+          <div className="chat-scroll" ref={listRef} aria-live="polite" aria-relevant="additions">
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))}
+            {isTyping && <TypingIndicator />}
+          </div>
+        </main>
+
+        <form className="composer" onSubmit={handleSubmit}>
+          <label className="composer-field">
+            <span className="sr-only">Type your message</span>
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask Gemini anything..."
+              rows={1}
+            />
+          </label>
+          <button type="submit" disabled={!canSend}>
+            Send
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

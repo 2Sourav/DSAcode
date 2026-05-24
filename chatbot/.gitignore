@@ -1,0 +1,14 @@
+.env
+dist
+node_modules
+.env.example
+.DS_Store
+*.log
+*.lock
+coverage
+.vscode
+.idea
+*.iml
+*.sublime-project
+*.sublime-workspace
+*.swp
